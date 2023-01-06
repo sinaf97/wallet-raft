@@ -84,7 +84,7 @@ class Node(object):
             "from": self.name,
             "term": self.term
         })
-        results = [r.status_code == 200 and json.loads(r.content).get("vote", False) == self.name for r in results]
+        results = [r and r.status_code == 200 and json.loads(r.content).get("vote", False) == self.name for r in results]
 
         if len(results) and (results.count(True) + 1)/(len(results) + 1) > 0.5:
             self.become_leader()
