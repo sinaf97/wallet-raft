@@ -2,9 +2,7 @@ import datetime
 import json
 import random
 import time
-from concurrent.futures import ThreadPoolExecutor
 from multiprocessing.pool import ThreadPool
-from threading import Thread
 
 import requests
 
@@ -37,7 +35,9 @@ class Node(object):
         self.leader = None
         self.leader_ack = False
         self.my_vote = None
-        self.election_timeout = random.randint(2, 5)
+        self.heartbeat_timer = 500      # ms
+        self.random_timeout = lambda: random.randint(2000, 5000)    # ms
+        self.election_timeout = self.random_timeout()
 
     def handle_request(self, rh):
         if rh["action"] == Actions.Vote:
@@ -59,7 +59,6 @@ class Node(object):
 
     def become_candidate(self):
         self.state = STATES.CANDIDATE
-        # self.term += 1
         print(f"{self.name}: I am candidate in term {self.term}")
         results = self.broadcast({
             "action": Actions.Vote,
@@ -119,14 +118,13 @@ class Node(object):
             if self.state != STATES.LEADER:
                 if self.leader_ack:
                     start = datetime.datetime.now()
-                    self.election_timeout = random.randint(2, 5)
+                    self.election_timeout = self.random_timeout()
                     self.leader_ack = False
-                elif (datetime.datetime.now() - start).total_seconds() > self.election_timeout:
-                    print("************ shit **********")
+                elif ((datetime.datetime.now() - start).total_seconds() * 1000) > self.election_timeout:
                     self.my_vote = None
                     self.become_candidate()
                     start = datetime.datetime.now()
-                    self.election_timeout = random.randint(2, 5)
+                    self.election_timeout = self.random_timeout()
                     self.leader_ack = False
 
     def heartbeat(self):
@@ -136,4 +134,4 @@ class Node(object):
                 "from": self.name,
                 "term": self.term
             })
-            time.sleep(0.5)
+            time.sleep(self.heartbeat_timer/1000)
