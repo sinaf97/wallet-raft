@@ -6,13 +6,9 @@ from server import Server
 
 
 def run_nodes():
-    server = Server(port=8004)
+    server = Server(port=8004, name="A", neighbours=[8001, 8002, 8003])
     Thread(target=server.start, daemon=True).start()
-    time.sleep(1)
-    n = Node()
-    n.name = "A"
-    n.neighbours = [8001, 8002, 8003]
-    n.start()
+    while True: continue
 
 
 if __name__ == '__main__':

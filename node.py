@@ -1,7 +1,7 @@
 import datetime
 import json
 import random
-import time
+import time, os
 from multiprocessing.pool import ThreadPool
 
 import requests
@@ -33,15 +33,15 @@ class Node(object):
     """
     instance = None
 
-    def __new__(cls, *args, **kwargs):
+    def __new__(cls, port, name, neighbours, *args, **kwargs):
         if cls.instance is None:
             cls.instance = object.__new__(cls, *args, **kwargs)
         return cls.instance
 
-    def __init__(self):
-        self.name = None
+    def __init__(self, port=None, name="", neighbours=[]):
+        self.name = name
         self.term = 1
-        self.neighbours = []
+        self.neighbours = neighbours
         self.state = STATES.FOLLOWER
         self.leader = None
         self.leader_ack = False
@@ -49,6 +49,7 @@ class Node(object):
         self.heartbeat_timer = 500      # ms
         self.random_timeout = lambda: random.randint(2000, 5000)    # ms
         self.election_timeout = self.random_timeout()
+        self.port = port
 
     def handle_request(self, rh):
         """
@@ -122,6 +123,12 @@ class Node(object):
             "from": self.name,
             "term": self.term
         })
+
+        # store leader address, simply port here
+        path = os.path.dirname(os.path.realpath(__file__))
+        with open(path + '/leader', 'w') as f:
+            f.write(str(self.port))
+
         print(f"{self.name}: I am the leader in term {self.term}")
         self.heartbeat()
 
