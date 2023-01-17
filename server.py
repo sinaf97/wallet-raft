@@ -9,10 +9,13 @@ from log import TYPES as LOGTYPES
 app = Flask(__name__)
 n = None
 
+
 @app.before_request
 def middleware():
     # wait till node is initialized
-    while n is None: continue
+    while n is None:
+        continue
+
 
 @app.route("/", methods=["POST"])
 def handle():
@@ -23,12 +26,17 @@ def handle():
         "status": "Ok"
     }
 
+
 @app.route("/add", methods=["POST"])
 def add_to_wallet():
-    n.append_entry(request.data, request.path, LOGTYPES.LOG)
+    response = n.append_entry(request.data, request.path, LOGTYPES.LOG)
+    # None response for followers
+
     return {
-        "status": "Ok"
+        "status": "Ok",
+        "body": json.dumps(response)
     }
+
 
 @app.route("/log", methods=["POST"])
 def trigger_commit():
@@ -42,6 +50,7 @@ def trigger_commit():
     return {
         "status": "Error"
     }
+
 
 class Server:
     def __init__(self, address="localhost", name="", neighbours=[], port=None):

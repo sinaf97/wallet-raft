@@ -1,12 +1,14 @@
 import datetime
 import json
 import random
-import time, os
+import time
+import os
 from multiprocessing.pool import ThreadPool
-from log import Log, TYPES as LOGTYPES
 import json
-
 import requests
+
+from log import Log, TYPES as LOGTYPES
+from walletManager import WalletManager
 
 
 class STATES:
@@ -35,15 +37,15 @@ class Node(object):
     """
     instance = None
 
-    def __new__(cls, port, name, neighbours, *args, **kwargs):
+    def __new__(cls, port, name, neighbors, *args, **kwargs):
         if cls.instance is None:
             cls.instance = object.__new__(cls, *args, **kwargs)
         return cls.instance
 
-    def __init__(self, port=None, name="", neighbours=[]):
+    def __init__(self, port=None, name="", neighbors=[]):
         self.name = name
         self.term = 1
-        self.neighbours = neighbours
+        self.neighbors = neighbors
         self.state = STATES.FOLLOWER
         self.leader = None
         self.leader_ack = False
@@ -54,6 +56,7 @@ class Node(object):
         self.port = port
         self.log_votes = {}
         self.log = Log()
+        self.db = WalletManager()
 
     def handle_request(self, rh):
         """
@@ -89,7 +92,8 @@ class Node(object):
             "from": self.name,
             "term": self.term
         })
-        results = [r and r.status_code == 200 and json.loads(r.content).get("vote", False) == self.name for r in results]
+        results = [r and r.status_code == 200 and json.loads(
+            r.content).get("vote", False) == self.name for r in results]
 
         if len(results) and (results.count(True) + 1)/(len(results) + 1) > 0.5:
             self.become_leader()
@@ -106,9 +110,9 @@ class Node(object):
             except Exception as e:
                 return None
 
-        if len(self.neighbours):
-            pool = ThreadPool(processes=len(self.neighbours))
-            results = pool.map(post, self.neighbours)
+        if len(self.neighbors):
+            pool = ThreadPool(processes=len(self.neighbors))
+            results = pool.map(post, self.neighbors)
         else:
             results = [True]
         return results
@@ -209,9 +213,12 @@ class Node(object):
                 data = json.dumps(data)
 
                 # initialize handshake
-                self.handshake(data, path, type)
+                return self.handshake(data, path, type)
             elif self.state == STATES.FOLLOWER:
-                self.vote_for_commit(rxid)
+                print(data)
+                d = json.loads(data)
+                print(d)
+                self.vote_for_commit(d["rxid"])
         elif type == LOGTYPES.COMMIT:
             if (self.state == STATES.LEADER):
                 self.handshake(data, path, type)
@@ -230,10 +237,10 @@ class Node(object):
             return False
 
         requests.post(f"http://127.0.0.1:{port}/log", {
-                "port": port,
-                "rxid": rxid,
-                "term": self.term
-            })
+            "port": port,
+            "rxid": rxid,
+            "term": self.term
+        })
 
         return True
 
@@ -245,27 +252,43 @@ class Node(object):
         if data["term"] < self.term:
             return (False, "")
 
-        self.log_votes.add(data["port"])
+        self.log_votes[data["rxid"]].add(data["port"])
 
         # we know the number of nodes but there is a problem here
-        if len(self.log_votes) / 3 > 0.5:
+        if len(self.log_votes[data["rxid"]]) / len(self.neighbors) > 0.5:
             return (True, data["rxid"])
 
         return (False, "")
 
     def handshake(self, data, path, type):
-        if self.state == STATES.LEADER:
-            return False
+        # if self.state == STATES.LEADER:
+        #     return False
 
         if type == LOGTYPES.LOG:
-            self.broadcast(data, path, type)
+            results = self.broadcast(json.loads(data), path)
+            results = [r and r.status_code == 200 for r in results]
+
+            if len(results) and (results.count(True) + 1)/(len(results) + 1) > 0.5:
+                return self.commit(data)
+            # retry till get commit
+            return {'response': 'rejected'}
+
         elif type == LOGTYPES.COMMIT:
             if (self.commit(data)):
-                self.broadcast(data, path, type)
+                self.broadcast(json.loads(data), path)
 
         return True
 
-    def commit(self, data):
+    def commit(self, data: dict):
         # `data`` should be the result after the execution
-        # self.log.append(data, type=commit)
-        pass
+        print(data)
+        data = json.loads(data)
+        # input data must have "action" key
+        if ('action' not in data.keys()):
+            return {'response': 'rejected'}
+        else:
+            res = self.db.perform_action(data['action'], data)
+            if (res == None):
+                return {'response': 'rejected'}
+            else:
+                return {'response': 'accepted', 'content': res}
