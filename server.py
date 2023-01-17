@@ -38,18 +38,28 @@ def add_to_wallet():
     }
 
 
-@app.route("/log", methods=["POST"])
-def trigger_commit():
-    (result, rxid) = n.wait_till_commit(request.data)
-    if result:
-        n.append_entry(request.data, request.path, LOGTYPES.COMMIT)
-        return {
-            "status": "Ok"
-        }
+@app.route("/commit", methods=["POST"])
+def add_to_commit():
+    data = json.loads(request.data)
+    n.follower_commit(int(data['rxid']), data)
 
     return {
-        "status": "Error"
+        "status": "Ok",
     }
+
+
+# @app.route("/log", methods=["POST"])
+# def trigger_commit():
+    # (result, rxid) = n.wait_till_commit(request.data)
+    # if result:
+    #     n.append_entry(request.data, request.path, LOGTYPES.COMMIT)
+    #     return {
+    #         "status": "Ok"
+    #     }
+
+    # return {
+    #     "status": "Error"
+    # }
 
 
 class Server:

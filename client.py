@@ -49,6 +49,7 @@ class Client:
             "wallet_id": wallet_id
         })
         # print result
+        print(response)
 
     def increase_balance(self):
         wallet_id = input("What is your wallet ID: ")
@@ -59,6 +60,7 @@ class Client:
             "amount": float(amount)
         }, "/add")
         # print result
+        print(response)
 
     def decrease_balance(self):
         wallet_id = input("What is your wallet ID: ")
@@ -69,6 +71,7 @@ class Client:
             "amount": float(amount)
         })
         # print result
+        print(response)
 
     def transfer(self):
         origin_wallet_id = input("What is the origin wallet ID: ")
@@ -81,12 +84,15 @@ class Client:
             "amount": float(amount)
         })
         # print result
+        print(response)
 
     def new_wallet(self):
         response = self.send_request({
             "action": CLIENT_ACTIONS.NEW_WALLET
         })
         # print result
+        print(response)
+
         # returns wallet id
 
     def remove_wallet(self):
@@ -96,10 +102,16 @@ class Client:
             "wallet_id": wallet_id,
         })
         # print result
+        print(response)
 
-    def send_request(self, payload, path="client"):
+    def send_request(self, payload, path="/add"):
         with open("leader", "r") as f:
             port = f.read()
 
         url = f"http://127.0.0.1:{port}{path}"
         return requests.post(url, json=payload)
+
+
+if __name__ == '__main__':
+    cl = Client()
+    cl.run()

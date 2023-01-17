@@ -34,7 +34,7 @@ class Log:
                 self.prxid = self.rxid
                 self.rxid = int(data["rxid"])
         elif type == TYPES.COMMIT:
-            self.state_machine[int(data['rxid'])] = (data["term"], data)
+            self.state_machine[int(data['rxid'])] = self.log[int(data['rxid'])]
 
         data['rxid'] = self.rxid
         return (self.prxid, self.rxid)

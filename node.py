@@ -8,7 +8,7 @@ import json
 import requests
 
 from log import Log, TYPES as LOGTYPES
-from walletManager import WalletManager
+from walletManager import WalletManager, ACTIONS as WALLET_ACTIONS
 
 
 class STATES:
@@ -213,17 +213,16 @@ class Node(object):
                 data = json.dumps(data)
 
                 # initialize handshake
-                return self.handshake(data, path, type)
+                return self.handshake(data, path)
             elif self.state == STATES.FOLLOWER:
-                print(data)
+                self.log.append(data, type)
                 d = json.loads(data)
-                print(d)
                 self.vote_for_commit(d["rxid"])
-        elif type == LOGTYPES.COMMIT:
-            if (self.state == STATES.LEADER):
-                self.handshake(data, path, type)
-            elif self.state == STATES.FOLLOWER:
-                (prxid, rxid) = self.log.append(data, type)
+        # elif type == LOGTYPES.COMMIT:
+        #     if (self.state == STATES.LEADER):
+        #         self.handshake(data, path, type)
+        #     elif self.state == STATES.FOLLOWER:
+        #         (prxid, rxid) = self.log.append(data, type)
 
     def leader_port(self) -> str:
         with open("leader", "r") as f:
@@ -244,23 +243,23 @@ class Node(object):
 
         return True
 
-    def wait_till_commit(self, data):
-        if self.state != STATES.LEADER:
-            return (False, "")
+    # def wait_till_commit(self, data):
+    #     if self.state != STATES.LEADER:
+    #         return (False, "")
 
-        data = json.loads(data)
-        if data["term"] < self.term:
-            return (False, "")
+    #     data = json.loads(data)
+    #     if data["term"] < self.term:
+    #         return (False, "")
 
-        self.log_votes[data["rxid"]].add(data["port"])
+    #     self.log_votes[data["rxid"]].add(data["port"])
 
-        # we know the number of nodes but there is a problem here
-        if len(self.log_votes[data["rxid"]]) / len(self.neighbors) > 0.5:
-            return (True, data["rxid"])
+    #     # we know the number of nodes but there is a problem here
+    #     if len(self.log_votes[data["rxid"]]) / len(self.neighbors) > 0.5:
+    #         return (True, data["rxid"])
 
-        return (False, "")
+    #     return (False, "")
 
-    def handshake(self, data, path, type):
+    def handshake(self, data, path, type=LOGTYPES.LOG):
         # if self.state == STATES.LEADER:
         #     return False
 
@@ -269,26 +268,54 @@ class Node(object):
             results = [r and r.status_code == 200 for r in results]
 
             if len(results) and (results.count(True) + 1)/(len(results) + 1) > 0.5:
-                return self.commit(data)
+                return self.leader_commit(data)
             # retry till get commit
             return {'response': 'rejected'}
 
-        elif type == LOGTYPES.COMMIT:
-            if (self.commit(data)):
-                self.broadcast(json.loads(data), path)
+        return {'response': 'rejected'}
 
-        return True
-
-    def commit(self, data: dict):
+    def leader_commit(self, data):
         # `data`` should be the result after the execution
-        print(data)
         data = json.loads(data)
         # input data must have "action" key
+
+        # send from log to state machine
+        rxid = int(data['rxid'])
+        self.log.append(json.dumps({'rxid': rxid}), LOGTYPES.COMMIT)
+
+        term, data = self.log.log[rxid]
         if ('action' not in data.keys()):
-            return {'response': 'rejected'}
+            result = {'response': 'rejected'}
         else:
             res = self.db.perform_action(data['action'], data)
+            print(res)
             if (res == None):
-                return {'response': 'rejected'}
+                result = {'response': 'rejected'}
             else:
-                return {'response': 'accepted', 'content': res}
+                result = {'response': 'accepted', 'content': res}
+
+        self.broadcast({
+            'rxid': int(data['rxid']),
+            'action': WALLET_ACTIONS.REPLAY,
+            'result': result,
+            'data': data
+        }, path='/commit')
+
+        return result
+
+    def follower_commit(self, rxid: int, data):
+        # reply action
+
+        # send from log to state machine
+        rxid = int(data['rxid'])
+        self.log.append(json.dumps({'rxid': rxid}), LOGTYPES.COMMIT)
+
+        if ('action' not in data.keys() or data['action'] != WALLET_ACTIONS.REPLAY):
+            result = {'response': 'rejected'}
+        else:
+            res = self.db.perform_action(data['action'], data)
+            print(res)
+            if (res == None):
+                result = {'response': 'rejected'}
+            else:
+                result = {'response': 'accepted', 'content': res}
