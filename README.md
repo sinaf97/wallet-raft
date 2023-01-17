@@ -1,8 +1,11 @@
 # Wallet with Raft
-## Sina Farahani Nia
-## Mohammad AghaNabi
-## Alireza Sharzeh
-## Yasaman ...
+Sina Farahani Nia
+
+Mohammad AghaNabi
+
+Alireza Sharzeh
+
+Yasaman ...
 
 # Client
 The highest level of the application is the interface with which a user can communicate with the network.
