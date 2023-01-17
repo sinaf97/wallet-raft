@@ -3,6 +3,8 @@ import json
 import random
 import time, os
 from multiprocessing.pool import ThreadPool
+from log import Log, TYPES as LOGTYPES
+import json
 
 import requests
 
@@ -50,6 +52,8 @@ class Node(object):
         self.random_timeout = lambda: random.randint(2000, 5000)    # ms
         self.election_timeout = self.random_timeout()
         self.port = port
+        self.log_votes = {}
+        self.log = Log()
 
     def handle_request(self, rh):
         """
@@ -92,13 +96,13 @@ class Node(object):
         else:
             self.state = STATES.FOLLOWER
 
-    def broadcast(self, data):
+    def broadcast(self, data, path="/"):
         """
         broadcasts a message(data) to all other nodes in a parallel manner using Threads
         """
         def post(n):
             try:
-                return requests.post(f"http://127.0.0.1:{n}", json=data)
+                return requests.post(f"http://127.0.0.1:{n}{path}", json=data)
             except Exception as e:
                 return None
 
@@ -115,6 +119,7 @@ class Node(object):
         it updates the node's state and broadcasts its leadership to others.
         it also starts the heartbeat process, assuring people of their leader being alive and healthy.
         """
+        self.log.node_type = STATES.LEADER
         self.state = STATES.LEADER
         self.leader = self
         self.term += 1
@@ -148,6 +153,7 @@ class Node(object):
         """
         It sets a node to be a follower, cancelling its candidate status if exists.
         """
+        self.log.node_type = STATES.FOLLOWER
         self.state = STATES.FOLLOWER
         self.leader_ack = True
         self.leader = leader["from"]
@@ -186,3 +192,78 @@ class Node(object):
                 "term": self.term
             })
             time.sleep(self.heartbeat_timer/1000)
+
+    def append_entry(self, data, path, type):
+        if type == LOGTYPES.LOG:
+            (prxid, rxid) = self.log.append(data, type)
+            if (self.state == STATES.LEADER):
+                # we will count votes later
+                self.log_votes[data["rxid"]] = set()
+
+                # add mandatory data to payload
+                data = json.loads(data)
+                data["rxid"] = rxid
+                data["term"] = self.term
+                data = json.dumps(data)
+
+                # initialize handshake
+                self.handshake(data, path, type)
+            elif self.state == STATES.FOLLOWER:
+                self.vote_for_commit(rxid)
+        elif type == LOGTYPES.COMMIT:
+            if (self.state == STATES.LEADER):
+                self.handshake(data, path, type)
+            elif self.state == STATES.FOLLOWER:
+                (prxid, rxid) = self.log.append(data, type)
+
+    def leader_port(self) -> str:
+        with open("leader", "r") as f:
+            port = f.read()
+
+        return port or ""
+
+    def vote_for_commit(self, rxid):
+        port = self.leader_port()
+        if not port.isnumeric():
+            return False
+
+        requests.post(f"http://127.0.0.1:{port}/log", {
+                "port": port,
+                "rxid": rxid,
+                "term": self.term
+            })
+
+        return True
+
+    def wait_till_commit(self, data):
+        if self.state != STATES.LEADER:
+            return (False, "")
+
+        data = json.loads(data)
+        if data["term"] < self.term:
+            return (False, "")
+
+        self.log_votes.add(data["port"])
+
+        # we know the number of nodes but there is a problem here
+        if len(self.log_votes) / 3 > 0.5:
+            return (True, data["rxid"])
+
+        return (False, "")
+
+    def handshake(self, data, path, type):
+        if self.state == STATES.LEADER:
+            return False
+
+        if type == LOGTYPES.LOG:
+            self.broadcast(data, path, type)
+        elif type == LOGTYPES.COMMIT:
+            if (self.commit(data)):
+                self.broadcast(data, path, type)
+
+        return True
+
+    def commit(self, data):
+        # `data`` should be the result after the execution
+        # self.log.append(data, type=commit)
+        pass

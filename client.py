@@ -57,7 +57,7 @@ class Client:
             "action": CLIENT_ACTIONS.INCREASE_BALANCE,
             "wallet_id": wallet_id,
             "amount": float(amount)
-        })
+        }, "/add")
         # print result
 
     def decrease_balance(self):
