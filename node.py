@@ -195,15 +195,17 @@ class Node(object):
 
     def append_entry(self, data, path, type):
         if type == LOGTYPES.LOG:
-            (prxid, rxid) = self.log.append(data, type)
             if (self.state == STATES.LEADER):
-                # we will count votes later
-                self.log_votes[data["rxid"]] = set()
-
                 # add mandatory data to payload
                 data = json.loads(data)
-                data["rxid"] = rxid
                 data["term"] = self.term
+                data = json.dumps(data)
+                (prxid, rxid) = self.log.append(data, type)
+
+                data = json.loads(data)
+                # we will count votes later
+                self.log_votes[rxid] = set()
+                data["rxid"] = rxid
                 data = json.dumps(data)
 
                 # initialize handshake

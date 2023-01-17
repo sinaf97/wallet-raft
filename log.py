@@ -24,14 +24,14 @@ class Log:
         data = json.loads(data)
         if type == TYPES.LOG:
             if self.node_type == node.STATES.LEADER:
-                self.log[self.rxid + 1] = (data["term"], data['content'])
+                self.log[self.rxid + 1] = (data["term"], data)
                 self.prxid = self.rxid
                 self.rxid = self.rxid + 1
             elif self.node_type == node.STATES.FOLLOWER:
-                    self.log[int(data["rxid"])] = (data["term"], data['content'])
+                    self.log[int(data["rxid"])] = (data["term"], data)
                     self.prxid = self.rxid
                     self.rxid = int(data["rxid"])
         elif type == TYPES.COMMIT:
-                self.state_machine[int(data['rxid'])] = (data["term"], data['content'])
+                self.state_machine[int(data['rxid'])] = (data["term"], data)
 
         return (self.prxid, self.rxid)
