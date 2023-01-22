@@ -3,11 +3,12 @@ import json
 
 
 class Block:
-    def __init__(self, prev_hash):
+    def __init__(self, prev_hash, root=None):
         self.transactions = []
         self.prev_hash = prev_hash
         self.next = None
         self.hash = None
+        self.root = root or self
 
     def make_hash(self):
         if self.is_full:
@@ -21,10 +22,10 @@ class Block:
         return len(self.transactions) >= 2
 
     def add_transaction(self, tr):
+        self.transactions.append(tr)
         if self.is_full:
             self.make_hash()
-            next_block = Block(self.hash)
+            next_block = Block(self.hash, self.root)
             self.next = next_block
-            next_block.add_transaction(tr)
-        else:
-            self.transactions.append(tr)
+            return next_block
+        return self
