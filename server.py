@@ -69,7 +69,7 @@ class Server:
         self.port = port or random.randint(8000, 9000)
         node = Node(port, name, neighbours)
         Thread(target=node.start, daemon=True).start()
-        n = node
+        n: Node = node
 
     def start(self):
         app.run(host=self.address, port=self.port)
