@@ -14,7 +14,6 @@ class Block:
 
     def make_hash(self):
         if self.is_full:
-            print(self.index, self.transactions, self.prev_hash)
             self.hash = hashlib.sha256(json.dumps({
                 'index': self.index,
                 'transactions': self.transactions,
@@ -43,10 +42,8 @@ class Block:
 
     @staticmethod
     def from_string(root, block):
-        print(block)
         block_dict = json.loads(json.loads(block))
 
-        print(block_dict)
         new_block = Block(block_dict["prev_hash"], block_dict["index"], root)
         new_block.transactions = block_dict["transactions"]
 

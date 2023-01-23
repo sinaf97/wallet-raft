@@ -260,7 +260,6 @@ class Node(object):
             result = {'response': 'rejected'}
         else:
             res = self.db.perform_action(data['action'], data)
-            print(res)
             if (res == None):
                 result = {'response': 'rejected'}
             else:
@@ -293,7 +292,6 @@ class Node(object):
             result = {'response': 'rejected'}
         else:
             res = self.db.perform_action(data['action'], data)
-            print(res)
             if (res == None):
                 result = {'response': 'rejected'}
             else:
