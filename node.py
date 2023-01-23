@@ -9,6 +9,7 @@ import requests
 
 from log import Log, TYPES as LOGTYPES
 from walletManager import WalletManager, ACTIONS as WALLET_ACTIONS
+from block import Block
 
 
 class STATES:
@@ -57,6 +58,7 @@ class Node(object):
         self.log_votes = {}
         self.log = Log()
         self.db = WalletManager()
+        self.current_block = Block('')
 
     def handle_request(self, rh):
         """
@@ -73,7 +75,9 @@ class Node(object):
         elif rh["action"] == Actions.Leader_ACK:
             self.leader_ack = True
             self.leader = rh["from"]
-            self.term = rh["term"]
+            if self.term != rh["term"]:
+                self.term = rh["term"]
+                # request for all blocks from leader
         elif rh["action"] == Actions.Leader:
             self.become_follower(rh)
 
@@ -116,6 +120,18 @@ class Node(object):
         else:
             results = [True]
         return results
+
+    def broadcast_block(self, block: Block, path="/add-block"):
+        # TODO: convert block into raw data
+        def post(n):
+            try:
+                return requests.post(f"http://127.0.0.1:{n}{path}", json=block.to_string())
+            except Exception as e:
+                return None
+
+        if len(self.neighbors):
+            pool = ThreadPool(processes=len(self.neighbors))
+            pool.map(post, self.neighbors)
 
     def become_leader(self):
         """
@@ -198,31 +214,23 @@ class Node(object):
             time.sleep(self.heartbeat_timer/1000)
 
     def append_entry(self, data, path, type):
-        if type == LOGTYPES.LOG:
-            if (self.state == STATES.LEADER):
-                # add mandatory data to payload
-                data = json.loads(data)
-                data["term"] = self.term
-                data = json.dumps(data)
-                (prxid, rxid) = self.log.append(data, type)
+        if (self.state == STATES.LEADER):
+            # add mandatory data to payload
+            data = json.loads(data)
+            data["term"] = self.term
+            data = json.dumps(data)
+            (prxid, rxid) = self.log.append(data, type)
 
-                data = json.loads(data)
-                # we will count votes later
-                self.log_votes[rxid] = set()
-                data["rxid"] = rxid
-                data = json.dumps(data)
+            data = json.loads(data)
+            # we will count votes later
+            self.log_votes[rxid] = set()
+            data["rxid"] = rxid
+            data = json.dumps(data)
 
-                # initialize handshake
-                return self.handshake(data, path)
-            elif self.state == STATES.FOLLOWER:
-                self.log.append(data, type)
-                d = json.loads(data)
-                self.vote_for_commit(d["rxid"])
-        # elif type == LOGTYPES.COMMIT:
-        #     if (self.state == STATES.LEADER):
-        #         self.handshake(data, path, type)
-        #     elif self.state == STATES.FOLLOWER:
-        #         (prxid, rxid) = self.log.append(data, type)
+            # initialize handshake
+            return self.handshake(data, path)
+        elif self.state == STATES.FOLLOWER:
+            self.log.append(data, type)
 
     def leader_port(self) -> str:
         with open("leader", "r") as f:
@@ -230,52 +238,16 @@ class Node(object):
 
         return port or ""
 
-    def vote_for_commit(self, rxid):
-        port = self.leader_port()
-        if not port.isnumeric():
-            return False
+    def handshake(self, data, path):
+        results = self.broadcast(json.loads(data), path)
+        results = [r and r.status_code == 200 for r in results]
 
-        requests.post(f"http://127.0.0.1:{port}/log", {
-            "port": port,
-            "rxid": rxid,
-            "term": self.term
-        })
-
-        return True
-
-    # def wait_till_commit(self, data):
-    #     if self.state != STATES.LEADER:
-    #         return (False, "")
-
-    #     data = json.loads(data)
-    #     if data["term"] < self.term:
-    #         return (False, "")
-
-    #     self.log_votes[data["rxid"]].add(data["port"])
-
-    #     # we know the number of nodes but there is a problem here
-    #     if len(self.log_votes[data["rxid"]]) / len(self.neighbors) > 0.5:
-    #         return (True, data["rxid"])
-
-    #     return (False, "")
-
-    def handshake(self, data, path, type=LOGTYPES.LOG):
-        # if self.state == STATES.LEADER:
-        #     return False
-
-        if type == LOGTYPES.LOG:
-            results = self.broadcast(json.loads(data), path)
-            results = [r and r.status_code == 200 for r in results]
-
-            if len(results) and (results.count(True) + 1)/(len(results) + 1) > 0.5:
-                return self.leader_commit(data)
-            # retry till get commit
-            return {'response': 'rejected'}
-
+        if len(results) and (results.count(True) + 1)/(len(results) + 1) > 0.5:
+            return self.leader_commit(data)
+        # retry till get commit
         return {'response': 'rejected'}
 
     def leader_commit(self, data):
-        # `data`` should be the result after the execution
         data = json.loads(data)
         # input data must have "action" key
 
@@ -294,12 +266,19 @@ class Node(object):
             else:
                 result = {'response': 'accepted', 'content': res}
 
-        self.broadcast({
+        # add transaction to current block
+        self.current_block.add_transaction({
             'rxid': int(data['rxid']),
             'action': WALLET_ACTIONS.REPLAY,
             'result': result,
             'data': data
-        }, path='/commit')
+        })
+
+        # if current block completed
+        if self.current_block.is_full:
+            # broadcast completed Block
+            self.broadcast_block(self.current_block, path='/add-block')
+            self.current_block = self.current_block.next
 
         return result
 

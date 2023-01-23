@@ -3,7 +3,7 @@ import random
 from flask import Flask, request
 from threading import Thread
 
-from node import Node
+from node import Node, Block
 from log import TYPES as LOGTYPES
 
 app = Flask(__name__)
@@ -48,6 +48,23 @@ def add_to_commit():
     }
 
 
+@app.route("/add-block", methods=["POST"])
+def add_to_block():
+    # convert data to a block
+    block = Block.from_string(n.current_block.root, request.data)
+    #
+
+    n.current_block.next = block
+    n.current_block = block
+
+    # commit transactions in block
+    for tr in block.transactions:
+        n.follower_commit(tr['rxid'], tr)
+
+    return {
+        "status": "Ok",
+    }
+
 # @app.route("/log", methods=["POST"])
 # def trigger_commit():
     # (result, rxid) = n.wait_till_commit(request.data)
@@ -69,7 +86,7 @@ class Server:
         self.port = port or random.randint(8000, 9000)
         node = Node(port, name, neighbours)
         Thread(target=node.start, daemon=True).start()
-        n: Node = node
+        n = node
 
     def start(self):
         app.run(host=self.address, port=self.port)
