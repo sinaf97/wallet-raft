@@ -18,7 +18,7 @@ class Block:
                 'index': self.index,
                 'transactions': self.transactions,
                 'prev_hash': self.prev_hash,
-            }).encode())
+            }).encode()).hexdigest()
 
     @property
     def is_full(self):
